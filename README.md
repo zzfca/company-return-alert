@@ -51,16 +51,12 @@ npm run dev -- -p 3588
 
 ### Docker Deployment Docker 部署
 
-`docker-compose.yml` 完整内容如下，宿主机访问端口已经设置为 `3588`：
+`docker-compose.yml` 完整内容如下，复制保存后直接运行 `docker compose up -d --build` 即可部署，宿主机访问端口为 `3588`：
 
 ```yaml
-version: '3.8'
-
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     container_name: bc-company-manager
     restart: unless-stopped
     ports:
@@ -68,20 +64,14 @@ services:
     volumes:
       - ./data/db.sqlite:/app/db.sqlite
     environment:
-      - NODE_ENV=production
-      - PORT=3000
+      NODE_ENV: production
+      PORT: 3000
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-    networks:
-      - app-network
-
-networks:
-  app-network:
-    driver: bridge
 ```
 
 ```bash
@@ -304,4 +294,3 @@ sudo chmod 666 data/db.sqlite
 ## License 许可证
 
 Private - All rights reserved
-
