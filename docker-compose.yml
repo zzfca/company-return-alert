@@ -1,7 +1,7 @@
 services:
   app:
     build:
-      context: https://github.com/zzfca/company-return-alert.git
+      context: .
       dockerfile: Dockerfile
     container_name: bc-company-manager
     restart: unless-stopped

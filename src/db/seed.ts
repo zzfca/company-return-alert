@@ -1,7 +1,13 @@
-import { db } from '@/db';
+import { drizzle } from 'drizzle-orm/libsql';
+import { createClient } from '@libsql/client';
+import * as schema from './schema';
 import { users, companies } from './schema';
 import { hashPassword } from '@/lib/auth';
 import { sql } from 'drizzle-orm';
+
+const databaseUrl = process.env.DATABASE_URL || 'file:db.sqlite';
+const client = createClient({ url: databaseUrl });
+const db = drizzle({ client, schema });
 
 async function ensureTables() {
   await db.run(sql`
