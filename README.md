@@ -12,7 +12,7 @@ A lightweight company declaration management system for BC Province companies, b
 - **Tax Filing Tracking** - 税务申报跟踪（年度报税/GST/年报）
 - **Document Storage** - 文档资料管理
 - **Audit Logs** - 操作审计日志
-- **Docker Ready** - 一段 Docker Compose 配置即可部署
+- **Docker Ready** - 直接拉取预构建镜像即可部署
 
 ## Tech Stack 技术栈
 
@@ -30,14 +30,12 @@ A lightweight company declaration management system for BC Province companies, b
 
 ### Docker Compose 一段部署
 
-把下面内容保存为 `docker-compose.yml`，然后在同一目录运行 `docker compose up -d --build` 即可。无需先 `git clone` 项目源码，Compose 会直接从 GitHub 拉取代码构建。
+把下面内容保存为 `docker-compose.yml`，然后在同一目录运行 `docker compose up -d` 即可。Compose 会直接从 GitHub Container Registry 拉取预构建镜像，无需在服务器上安装 npm 依赖或编译源码。
 
 ```yaml
 services:
   app:
-    build:
-      context: https://github.com/zzfca/company-return-alert.git
-      dockerfile: Dockerfile
+    image: ghcr.io/zzfca/company-return-alert:latest
     container_name: bc-company-manager
     restart: unless-stopped
     ports:
@@ -62,7 +60,8 @@ volumes:
 运行：
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 访问：
@@ -116,7 +115,8 @@ nano docker-compose.yml
 Paste the complete `docker-compose.yml` from Quick Start, save, then run:
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 ### Step 3: Verify 验证
@@ -153,6 +153,15 @@ docker compose down -v
 ---
 
 ## Configuration 配置
+
+### Image Updates 更新镜像
+
+每次代码推送到 `main` 后，GitHub Actions 会自动发布新镜像到 `ghcr.io/zzfca/company-return-alert:latest`。服务器更新时运行：
+
+```bash
+docker compose pull
+docker compose up -d
+```
 
 ### Change Port 修改端口
 
@@ -218,7 +227,8 @@ company-return-alert/
 
 ```bash
 # Docker
-docker compose up -d --build  # Build and start
+docker compose pull          # Download latest image
+docker compose up -d         # Start containers
 docker compose down           # Stop containers
 docker compose logs -f        # Follow logs
 docker exec -it bc-company-manager sh  # Enter container
@@ -250,7 +260,8 @@ sudo kill -9 <PID>
 
 ```bash
 docker compose down -v
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
 
 ---
