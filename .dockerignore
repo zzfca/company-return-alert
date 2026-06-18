@@ -1,0 +1,47 @@
+# 依赖
+node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Next.js 构建输出
+.next
+out
+
+# 环境变量文件
+.env
+.env*.local
+
+# 日志
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# 测试
+coverage
+.nyc_output
+
+# Git
+.git
+.gitignore
+
+# 数据库文件（会通过 volume 挂载）
+*.sqlite
+*.sqlite-journal
+*.db
+
+# 其他
+README.md
+.editorconfig
+data/
+drizzle/
+check-db.mjs
