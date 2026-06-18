@@ -13,7 +13,7 @@ A lightweight company declaration management system for BC Province companies, b
 - **Document Storage** - 文档资料管理
 - **Audit Logs** - 操作审计日志
 - **Role-based Auth** - 基于 Cookie 的安全认证
-- **Docker Ready** - 一键 Docker 部署
+- **Docker Ready** - 一段 Docker Compose 配置即可部署
 
 ## Tech Stack 技术栈
 
@@ -30,66 +30,65 @@ A lightweight company declaration management system for BC Province companies, b
 
 ## Quick Start 快速开始
 
-### Prerequisites 环境要求
+### Docker Compose 一段部署
 
-- [Node.js 20+](https://nodejs.org/) (本地开发)
-- [Docker & Docker Compose](https://docs.docker.com/) (生产部署)
-
-### Local Development 本地开发
-
-```bash
-# Clone and install
-git clone https://github.com/zzfca/company-return-alert.git
-cd company-return-alert
-npm install
-
-# Run development server
-npm run dev -- -p 3588
-
-# Open http://localhost:3588
-```
-
-### Docker Deployment Docker 部署
-
-`docker-compose.yml` 完整内容如下，复制保存后直接运行 `docker compose up -d --build` 即可部署，宿主机访问端口为 `3588`：
+把下面内容保存为 `docker-compose.yml`，然后在同一目录运行 `docker compose up -d --build` 即可。无需先 `git clone` 项目源码，Compose 会直接从 GitHub 拉取代码构建。
 
 ```yaml
 services:
   app:
-    build: .
+    build:
+      context: https://github.com/zzfca/company-return-alert.git
+      dockerfile: Dockerfile
     container_name: bc-company-manager
     restart: unless-stopped
     ports:
       - "3588:3000"
     volumes:
-      - ./data/db.sqlite:/app/db.sqlite
+      - company-data:/app/data
     environment:
       NODE_ENV: production
       PORT: 3000
+      DATABASE_URL: file:/app/data/db.sqlite
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+
+volumes:
+  company-data:
 ```
 
+运行：
+
 ```bash
-# Clone the repo
-git clone https://github.com/zzfca/company-return-alert.git
-cd company-return-alert
-
-# Build and start
 docker compose up -d --build
+```
 
-# View logs
-docker compose logs -f
+访问：
 
-# Stop
+```text
+http://your-server-ip:3588
+```
+
+停止：
+
+```bash
 docker compose down
 ```
 
-Access at **http://your-server-ip:3588** or **http://localhost:3588**
+### Local Development 本地开发
+
+```bash
+git clone https://github.com/zzfca/company-return-alert.git
+cd company-return-alert
+npm install
+npm run dev -- -p 3588
+```
+
+Open `http://localhost:3588`.
 
 ---
 
@@ -98,49 +97,33 @@ Access at **http://your-server-ip:3588** or **http://localhost:3588**
 ### Step 1: Install Docker 安装 Docker
 
 ```bash
-# Update system
 sudo apt update && sudo apt upgrade -y
-
-# Install Docker
 curl -fsSL https://get.docker.com | sudo sh
-
-# Add current user to docker group
 sudo usermod -aG docker $USER
-
-# Restart shell or run: newgrp docker
-
-# Verify
+newgrp docker
 sudo docker --version
-sudo docker compose version
+docker compose version
 ```
 
-### Step 2: Deploy the Application 部署应用
+### Step 2: Create Compose File 创建编排文件
 
 ```bash
-# Create project directory
 mkdir -p ~/bc-company-manager
 cd ~/bc-company-manager
+nano docker-compose.yml
+```
 
-# Option A: Clone from GitHub
-git clone https://github.com/zzfca/company-return-alert.git .
+Paste the complete `docker-compose.yml` from Quick Start, save, then run:
 
-# Option B: Upload via scp
-scp -r * username@your-server:~/bc-company-manager/
-
-# Build and start
+```bash
 docker compose up -d --build
 ```
 
 ### Step 3: Verify 验证
 
 ```bash
-# Check container status
 docker ps
-
-# View logs
 docker compose logs -f
-
-# Test HTTP endpoint
 curl http://localhost:3588
 ```
 
@@ -165,16 +148,17 @@ http://your-server-ip:3588
 
 ## Data Persistence 数据持久化
 
-The SQLite database file is stored at `./data/db.sqlite` in the project directory.
+The SQLite database is stored in the Docker named volume `company-data` at `/app/data/db.sqlite` inside the container.
 
 ```bash
-# Backup database
-cp data/db.sqlite data/db.sqlite.backup-$(date +%Y%m%d)
+# List volumes
+docker volume ls
 
-# Restore database
+# Stop app without deleting data
 docker compose down
-cp data/db.sqlite.backup-YYYYMMDD data/db.sqlite
-docker compose up -d
+
+# Stop app and delete database volume (dangerous)
+docker compose down -v
 ```
 
 ---
@@ -183,14 +167,14 @@ docker compose up -d
 
 ### Change Port 修改端口
 
-Edit `docker-compose.yml`:
+Edit the host side of the port mapping:
 
 ```yaml
 ports:
   - "3588:3000"  # Host:Container
 ```
 
-The left side is the Ubuntu host port, and the right side is the container port.
+For example, use `8080:3000` if you want to visit `http://your-server-ip:8080`.
 
 ### Reverse Proxy (Nginx) 反向代理
 
@@ -246,21 +230,16 @@ company-return-alert/
 ## Common Commands 常用命令
 
 ```bash
-# Development
-npm run dev              # Start dev server
-npm run build            # Build for production
-npm run start            # Start production server
-
-# Database
-npx drizzle-kit push     # Push schema to database
-npx drizzle-kit studio   # Open database GUI
-
 # Docker
-docker compose up -d     # Start containers
-docker compose down      # Stop containers
-docker compose up -d --build  # Rebuild and start
-docker compose logs -f   # Follow logs
+docker compose up -d --build  # Build and start
+docker compose down           # Stop containers
+docker compose logs -f        # Follow logs
 docker exec -it bc-company-manager sh  # Enter container
+
+# Local development
+npm run dev
+npm run build
+npm run start
 ```
 
 ---
@@ -276,17 +255,15 @@ docker compose logs app
 ### Port already in use
 
 ```bash
-# Find process using port 3588
 sudo lsof -i :3588
-# Kill it
 sudo kill -9 <PID>
 ```
 
-### Permission denied on database
+### Reset database 重置数据库
 
 ```bash
-# Fix permissions
-sudo chmod 666 data/db.sqlite
+docker compose down -v
+docker compose up -d --build
 ```
 
 ---
