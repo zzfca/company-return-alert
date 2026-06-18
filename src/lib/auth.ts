@@ -32,7 +32,7 @@ export async function login(username: string, password: string) {
   const cookieStore = await cookies();
   cookieStore.set('userId', user.id.toString(), {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: process.env.COOKIE_SECURE === 'true',
     sameSite: 'lax',
     maxAge: 60 * 60 * 24 * 7, // 7 days
   });
@@ -77,3 +77,4 @@ export async function changePassword(oldPassword: string, newPassword: string) {
 
   return { success: true };
 }
+

@@ -40,6 +40,8 @@ const statusNames: Record<string, string> = {
 export default function Home() {
   const [currentUser, setCurrentUser] = useState<{ id: number; username: string; name: string } | null>(null);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
 
@@ -106,12 +108,21 @@ export default function Home() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const result = await authenticateUser(loginForm.username, loginForm.password);
-    if (result.success && result.user) {
-      setCurrentUser(result.user);
-      setLoginForm({ username: '', password: '' });
-    } else {
-      alert(result.message || '用户名或密码错误');
+    setLoginError('');
+    setIsLoggingIn(true);
+
+    try {
+      const result = await authenticateUser(loginForm.username, loginForm.password);
+      if (result.success && result.user) {
+        setCurrentUser(result.user);
+        setLoginForm({ username: '', password: '' });
+      } else {
+        setLoginError(result.message || '用户名或密码错误');
+      }
+    } catch (error: any) {
+      setLoginError(error?.message || '登录失败，请查看 Docker 日志');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -323,11 +334,17 @@ export default function Home() {
                 placeholder="请输入密码"
               />
             </div>
+            {loginError && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {loginError}
+              </div>
+            )}
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-3 rounded-lg hover:bg-blue-600 font-medium shadow-lg hover:shadow-xl transition-all"
+              disabled={isLoggingIn}
+              className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-3 rounded-lg hover:bg-blue-600 font-medium shadow-lg hover:shadow-xl transition-all disabled:cursor-not-allowed disabled:opacity-60"
             >
-              登录
+              {isLoggingIn ? '登录中...' : '登录'}
             </button>
           </form>
         </div>
@@ -1510,3 +1527,4 @@ export default function Home() {
     </div>
   );
 }
+
