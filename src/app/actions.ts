@@ -4,12 +4,6 @@ import { db } from '@/db';
 import { companies, filings, documents, users, auditLogs, filingHistory } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { seedDatabase } from '@/db/seed';
-import {
-  getCurrentUser as authGetCurrentUser,
-  login,
-  logout as authLogout,
-  changePassword as authChangePassword,
-} from '@/lib/auth';
 import type { NewCompany, NewFiling } from '@/db/schema';
 
 function calculateDueDate(registrationDate: string, year: number): string {
@@ -26,26 +20,10 @@ function calculateDueDate(registrationDate: string, year: number): string {
 }
 
 async function requireAuth() {
-  const user = await authGetCurrentUser();
-  if (!user) throw new Error('未授权，请先登录');
-  return user;
-}
-
-export async function authenticateUser(username: string, password: string) {
   await seedDatabase();
-  return login(username, password);
-}
-
-export async function logout() {
-  return authLogout();
-}
-
-export async function changePassword(oldPassword: string, newPassword: string) {
-  return authChangePassword(oldPassword, newPassword);
-}
-
-export async function getCurrentUser() {
-  return authGetCurrentUser();
+  const [user] = await db.select().from(users).where(eq(users.username, 'xie')).limit(1);
+  if (!user) throw new Error('系统用户初始化失败');
+  return user;
 }
 
 export async function createCompany(data: Omit<NewCompany, 'createdBy' | 'lastModifiedBy'>) {
@@ -171,6 +149,7 @@ export async function deleteCompany(id: number) {
 }
 
 export async function getCompanies(sortBy: 'registration' | 'filing' = 'registration') {
+  await seedDatabase();
   const allCompanies = await db.select().from(companies).orderBy(desc(companies.registrationDate));
 
   if (sortBy === 'filing') {
@@ -190,6 +169,7 @@ export async function getCompanies(sortBy: 'registration' | 'filing' = 'registra
 }
 
 export async function getCompanyWithDetails(id: number) {
+  await seedDatabase();
   const [company] = await db.select().from(companies).where(eq(companies.id, id));
   if (!company) return null;
 
@@ -236,6 +216,7 @@ export async function createFiling(data: Omit<NewFiling, 'createdBy'>) {
 }
 
 export async function getFilings() {
+  await seedDatabase();
   return await db.select().from(filings).orderBy(filings.dueDate);
 }
 
@@ -344,6 +325,7 @@ export async function deleteFiling(id: number) {
 }
 
 export async function getFilingHistory(companyId: number) {
+  await seedDatabase();
   return await db.select()
     .from(filingHistory)
     .where(eq(filingHistory.companyId, companyId))
@@ -377,6 +359,7 @@ export async function uploadDocument(data: {
 }
 
 export async function getDocuments(companyId?: number, filingId?: number) {
+  await seedDatabase();
   const conditions = [];
   if (companyId) conditions.push(eq(documents.companyId, companyId));
   if (filingId) conditions.push(eq(documents.filingId, filingId));
@@ -401,6 +384,7 @@ export async function deleteDocument(id: number) {
 }
 
 export async function getUsers() {
+  await seedDatabase();
   return await db.select({
     id: users.id,
     username: users.username,
@@ -411,6 +395,7 @@ export async function getUsers() {
 }
 
 export async function getAuditLogs(limit = 100) {
+  await seedDatabase();
   return await db.select({
     id: auditLogs.id,
     userId: auditLogs.userId,

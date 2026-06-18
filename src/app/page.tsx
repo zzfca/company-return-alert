@@ -15,11 +15,7 @@ import {
   deleteFiling,
   uploadDocument,
   deleteDocument,
-  authenticateUser,
-  changePassword,
   getAuditLogs,
-  getCurrentUser,
-  logout as serverLogout,
 } from '@/app/actions';
 import type { Company, Filing, Document, AuditLog } from '@/db/schema';
 
@@ -38,10 +34,7 @@ const statusNames: Record<string, string> = {
 };
 
 export default function Home() {
-  const [currentUser, setCurrentUser] = useState<{ id: number; username: string; name: string } | null>(null);
-  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [passwordForm, setPasswordForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+  const currentUser = { name: 'Direct Access' };
 
   const [activeTab, setActiveTab] = useState<'dashboard' | 'companies' | 'filings' | 'logs'>('dashboard');
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -75,19 +68,10 @@ export default function Home() {
   }>({ name: '', type: 'receipt', file: null });
 
   useEffect(() => {
-    // 从服务端获取当前登录状态
-    getCurrentUser().then(user => {
-      if (user) setCurrentUser(user);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (currentUser) {
-      loadCompanies();
-      loadFilings();
-      if (activeTab === 'logs') loadLogs();
-    }
-  }, [currentUser, sortBy, activeTab]);
+    loadCompanies();
+    loadFilings();
+    if (activeTab === 'logs') loadLogs();
+  }, [sortBy, activeTab]);
 
   const loadCompanies = async () => {
     const data = await getCompanies(sortBy);
@@ -102,38 +86,6 @@ export default function Home() {
   const loadLogs = async () => {
     const data = await getAuditLogs(100);
     setLogs(data);
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const result = await authenticateUser(loginForm.username, loginForm.password);
-    if (result.success && result.user) {
-      setCurrentUser(result.user);
-      setLoginForm({ username: '', password: '' });
-    } else {
-      alert(result.message || '用户名或密码错误');
-    }
-  };
-
-  const handleLogout = async () => {
-    await serverLogout();
-    setCurrentUser(null);
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      alert('两次输入的新密码不一致');
-      return;
-    }
-    try {
-      await changePassword(passwordForm.oldPassword, passwordForm.newPassword);
-      alert('密码修改成功');
-      setShowPasswordModal(false);
-      setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
-    } catch (error: any) {
-      alert(error.message || '密码修改失败');
-    }
   };
 
   const handleCreateCompany = async () => {
@@ -292,49 +244,6 @@ export default function Home() {
     }
   };
 
-  if (!currentUser) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-slate-800 mb-2">公司申报管理系统</h1>
-            <p className="text-slate-500">BC省公司报税与文档管理</p>
-          </div>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">用户名</label>
-              <input
-                type="text"
-                required
-                value={loginForm.username}
-                onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="请输入用户名"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">密码</label>
-              <input
-                type="password"
-                required
-                value={loginForm.password}
-                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="请输入密码"
-              />
-            </div>
-            <button
-              type="submit"
-              className="w-full bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 font-medium shadow-lg hover:shadow-xl transition-all"
-            >
-              登录
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
   const getDaysUntilDue = (dueDate: string) => {
     const due = new Date(dueDate);
     const now = new Date();
@@ -379,18 +288,6 @@ export default function Home() {
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-slate-600">欢迎，<span className="font-semibold">{currentUser.name}</span></span>
-              <button
-                onClick={() => setShowPasswordModal(true)}
-                className="px-3 py-1.5 text-sm bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
-              >
-                修改密码
-              </button>
-              <button
-                onClick={handleLogout}
-                className="px-3 py-1.5 text-sm bg-red-100 text-red-600 rounded-lg hover:bg-red-200"
-              >
-                退出登录
-              </button>
             </div>
           </div>
         </div>
@@ -1412,78 +1309,6 @@ export default function Home() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {showPasswordModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-6 rounded-t-2xl">
-              <h2 className="text-2xl font-bold">修改密码</h2>
-            </div>
-            
-            <form onSubmit={handleChangePassword} className="p-8">
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    原密码 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={passwordForm.oldPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, oldPassword: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    新密码 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={passwordForm.newPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    确认新密码 <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    required
-                    value={passwordForm.confirmPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 mt-6">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowPasswordModal(false);
-                    setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
-                  }}
-                  className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 font-medium"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium"
-                >
-                  确认修改
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

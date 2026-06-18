@@ -8,7 +8,7 @@ BC 省公司申报管理系统，基于 Next.js、SQLite、Drizzle ORM 和 Docke
 - 年度报税、GST、年报申报跟踪
 - 文档资料管理
 - 操作审计日志
-- 登录与会话 Cookie
+- 直接访问，无需登录
 - 预构建 Docker 镜像部署
 
 ## 快速部署
@@ -53,12 +53,7 @@ docker compose up -d
 http://your-server-ip:3588
 ```
 
-默认账号：
-
-| Username | Password |
-| --- | --- |
-| xie | xie123 |
-| admin | admin123 |
+打开地址后直接进入系统，无需登录。
 
 ## 更新应用
 
