@@ -117,7 +117,10 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(loginForm),
       });
-      const result = await response.json();
+      const contentType = response.headers.get('content-type') || '';
+      const result = contentType.includes('application/json')
+        ? await response.json()
+        : { success: false, message: '登录接口返回 ' + response.status + '：' + await response.text() };
 
       if (response.ok && result.success && result.user) {
         setCurrentUser(result.user);
@@ -1533,6 +1536,7 @@ export default function Home() {
     </div>
   );
 }
+
 
 
 
