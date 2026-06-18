@@ -6,14 +6,13 @@ import { sql } from 'drizzle-orm';
 import bcrypt from 'bcryptjs';
 
 const SALT_ROUNDS = 10;
+const databaseUrl = process.env.DATABASE_URL || 'file:db.sqlite';
+const client = createClient({ url: databaseUrl });
+const db = drizzle({ client, schema });
 
 async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, SALT_ROUNDS);
 }
-
-const databaseUrl = process.env.DATABASE_URL || 'file:db.sqlite';
-const client = createClient({ url: databaseUrl });
-const db = drizzle({ client, schema });
 
 async function ensureTables() {
   await db.run(sql`

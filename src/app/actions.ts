@@ -4,9 +4,13 @@ import { db } from '@/db';
 import { companies, filings, documents, users, auditLogs, filingHistory } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { seedDatabase } from '@/db/seed';
-import type { NewCompany, NewFiling, NewFilingHistory } from '@/db/schema';
-
-// ─── helpers ────────────────────────────────────────────────────────────────
+import {
+  getCurrentUser as authGetCurrentUser,
+  login,
+  logout as authLogout,
+  changePassword as authChangePassword,
+} from '@/lib/auth';
+import type { NewCompany, NewFiling } from '@/db/schema';
 
 function calculateDueDate(registrationDate: string, year: number): string {
   const regDate = new Date(registrationDate);
@@ -22,21 +26,27 @@ function calculateDueDate(registrationDate: string, year: number): string {
 }
 
 async function requireAuth() {
-  await seedDatabase();
-  const [user] = await db.select().from(users).where(eq(users.username, 'xie')).limit(1);
-  if (user) return { id: user.id, username: user.username, name: user.name, role: user.role };
-
-  const [fallbackUser] = await db.select().from(users).limit(1);
-  if (!fallbackUser) throw new Error('系统用户初始化失败');
-  return {
-    id: fallbackUser.id,
-    username: fallbackUser.username,
-    name: fallbackUser.name,
-    role: fallbackUser.role,
-  };
+  const user = await authGetCurrentUser();
+  if (!user) throw new Error('未授权，请先登录');
+  return user;
 }
 
-// ─── companies ───────────────────────────────────────────────────────────────
+export async function authenticateUser(username: string, password: string) {
+  await seedDatabase();
+  return login(username, password);
+}
+
+export async function logout() {
+  return authLogout();
+}
+
+export async function changePassword(oldPassword: string, newPassword: string) {
+  return authChangePassword(oldPassword, newPassword);
+}
+
+export async function getCurrentUser() {
+  return authGetCurrentUser();
+}
 
 export async function createCompany(data: Omit<NewCompany, 'createdBy' | 'lastModifiedBy'>) {
   const user = await requireAuth();
@@ -57,7 +67,6 @@ export async function createCompany(data: Omit<NewCompany, 'createdBy' | 'lastMo
 
   const registrationYear = new Date(data.registrationDate).getFullYear();
 
-  // 年报：到期时间为每年注册日
   await db.insert(filings).values({
     companyId: company.id,
     type: 'annual_report',
@@ -67,7 +76,6 @@ export async function createCompany(data: Omit<NewCompany, 'createdBy' | 'lastMo
     createdBy: user.id,
   });
 
-  // 报税：到期时间为注册日+6个月
   const incomeTaxDueDate = calculateDueDate(data.registrationDate, registrationYear);
   await db.insert(filings).values({
     companyId: company.id,
@@ -114,7 +122,7 @@ export async function updateCompany(
     changes: JSON.stringify({ old: oldCompany, new: data }),
   });
 
-  if (data.requiresGST !== undefined && data.requiresGST !== oldCompany.requiresGST) {
+  if (oldCompany && data.requiresGST !== undefined && data.requiresGST !== oldCompany.requiresGST) {
     const currentYear = new Date().getFullYear();
 
     if (data.requiresGST) {
@@ -122,7 +130,7 @@ export async function updateCompany(
         .where(and(
           eq(filings.companyId, id),
           eq(filings.type, 'gst'),
-          eq(filings.year, currentYear)
+          eq(filings.year, currentYear),
         ));
 
       if (existingGST.length === 0) {
@@ -142,7 +150,7 @@ export async function updateCompany(
         .where(and(
           eq(filings.companyId, id),
           eq(filings.type, 'gst'),
-          eq(filings.status, 'pending')
+          eq(filings.status, 'pending'),
         ));
     }
   }
@@ -173,7 +181,7 @@ export async function getCompanies(sortBy: 'registration' | 'filing' = 'registra
           .orderBy(filings.dueDate)
           .limit(1);
         return { ...company, nextFilingDate: nextFiling[0]?.dueDate || '9999-12-31' };
-      })
+      }),
     );
     return companiesWithFilings.sort((a, b) => a.nextFilingDate.localeCompare(b.nextFilingDate));
   }
@@ -196,7 +204,7 @@ export async function getCompanyWithDetails(id: number) {
   const history = await getFilingHistory(id);
 
   const lastModifier = company.lastModifiedBy
-    ? await db.select().from(users).where(eq(users.id, company.lastModifiedBy)).then(r => r[0])
+    ? await db.select().from(users).where(eq(users.id, company.lastModifiedBy)).then((rows) => rows[0])
     : null;
 
   return {
@@ -207,8 +215,6 @@ export async function getCompanyWithDetails(id: number) {
     lastModifiedByUser: lastModifier?.name,
   };
 }
-
-// ─── filings ─────────────────────────────────────────────────────────────────
 
 export async function createFiling(data: Omit<NewFiling, 'createdBy'>) {
   const user = await requireAuth();
@@ -269,10 +275,10 @@ export async function markFilingCompleted(filingId: number) {
     .where(and(
       eq(filings.companyId, filing.companyId),
       eq(filings.type, filing.type),
-      eq(filings.year, nextYear)
+      eq(filings.year, nextYear),
     ));
 
-  if (existing.length === 0) {
+  if (company && existing.length === 0) {
     let nextDueDate: string;
     if (filing.type === 'annual_report') {
       const regDate = new Date(company.registrationDate);
@@ -344,18 +350,14 @@ export async function getFilingHistory(companyId: number) {
     .orderBy(desc(filingHistory.year), desc(filingHistory.filedDate));
 }
 
-// ─── documents ───────────────────────────────────────────────────────────────
-
-export async function uploadDocument(
-  data: {
-    companyId: number;
-    filingId?: number;
-    name: string;
-    type: string;
-    fileUrl: string;
-    mimeType?: string;
-  },
-) {
+export async function uploadDocument(data: {
+  companyId: number;
+  filingId?: number;
+  name: string;
+  type: string;
+  fileUrl: string;
+  mimeType?: string;
+}) {
   const user = await requireAuth();
 
   const [doc] = await db.insert(documents).values({
@@ -398,8 +400,6 @@ export async function deleteDocument(id: number) {
   });
 }
 
-// ─── users ───────────────────────────────────────────────────────────────────
-
 export async function getUsers() {
   return await db.select({
     id: users.id,
@@ -410,10 +410,8 @@ export async function getUsers() {
   }).from(users);
 }
 
-// ─── audit logs ──────────────────────────────────────────────────────────────
-
 export async function getAuditLogs(limit = 100) {
-  const logs = await db.select({
+  return await db.select({
     id: auditLogs.id,
     userId: auditLogs.userId,
     action: auditLogs.action,
@@ -427,6 +425,4 @@ export async function getAuditLogs(limit = 100) {
     .leftJoin(users, eq(auditLogs.userId, users.id))
     .orderBy(desc(auditLogs.timestamp))
     .limit(limit);
-
-  return logs;
 }

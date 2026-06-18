@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import {
   getCompanies,
+  createCompany,
   updateCompany,
   deleteCompany,
   getCompanyWithDetails,
@@ -14,9 +15,13 @@ import {
   deleteFiling,
   uploadDocument,
   deleteDocument,
+  authenticateUser,
+  changePassword,
   getAuditLogs,
+  getCurrentUser,
+  logout as serverLogout,
 } from '@/app/actions';
-import type { Company, Filing, Document } from '@/db/schema';
+import type { Company, Filing, Document, AuditLog } from '@/db/schema';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -33,6 +38,11 @@ const statusNames: Record<string, string> = {
 };
 
 export default function Home() {
+  const [currentUser, setCurrentUser] = useState<{ id: number; username: string; name: string } | null>(null);
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+
   const [activeTab, setActiveTab] = useState<'dashboard' | 'companies' | 'filings' | 'logs'>('dashboard');
   const [companies, setCompanies] = useState<Company[]>([]);
   const [filings, setFilings] = useState<Filing[]>([]);
@@ -65,10 +75,19 @@ export default function Home() {
   }>({ name: '', type: 'receipt', file: null });
 
   useEffect(() => {
+    // 从服务端获取当前登录状态
+    getCurrentUser().then(user => {
+      if (user) setCurrentUser(user);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (currentUser) {
       loadCompanies();
       loadFilings();
       if (activeTab === 'logs') loadLogs();
-  }, [sortBy, activeTab]);
+    }
+  }, [currentUser, sortBy, activeTab]);
 
   const loadCompanies = async () => {
     const data = await getCompanies(sortBy);
@@ -85,48 +104,64 @@ export default function Home() {
     setLogs(data);
   };
 
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const result = await authenticateUser(loginForm.username, loginForm.password);
+    if (result.success && result.user) {
+      setCurrentUser(result.user);
+      setLoginForm({ username: '', password: '' });
+    } else {
+      alert(result.message || '用户名或密码错误');
+    }
+  };
+
+  const handleLogout = async () => {
+    await serverLogout();
+    setCurrentUser(null);
+  };
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      alert('两次输入的新密码不一致');
+      return;
+    }
+    try {
+      await changePassword(passwordForm.oldPassword, passwordForm.newPassword);
+      alert('密码修改成功');
+      setShowPasswordModal(false);
+      setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+    } catch (error: any) {
+      alert(error.message || '密码修改失败');
+    }
+  };
+
   const handleCreateCompany = async () => {
     if (!companyForm.name || !companyForm.address || !companyForm.registrationDate) {
       alert('请填写必填项');
       return;
     }
-    try {
-      const response = await fetch('/api/companies', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(companyForm),
-      });
-      const result = await response.json();
-      if (!response.ok || !result.success) {
-        throw new Error(result.error || '创建公司失败');
-      }
-      await loadCompanies();
-      setShowCompanyModal(false);
-      setCompanyForm({
-        name: '', registrationNumber: '', address: '', city: 'Vancouver',
-        province: 'BC', postalCode: '', phone: '', email: '',
-        registrationDate: '', profitLoss: 0, notes: '', requiresGST: false,
-      });
-    } catch (error: any) {
-      alert(error?.message || '创建公司失败，请查看 Docker 日志');
-    }
+    await createCompany(companyForm);
+    await loadCompanies();
+    setShowCompanyModal(false);
+    setCompanyForm({
+      name: '', registrationNumber: '', address: '', city: 'Vancouver',
+      province: 'BC', postalCode: '', phone: '', email: '',
+      registrationDate: '', profitLoss: 0, notes: '', requiresGST: false,
+    });
   };
 
   const handleUpdateCompany = async () => {
     if (!selectedCompany) return;
-    try {
-      await updateCompany(selectedCompany.id, companyForm);
-      await loadCompanies();
-      setShowCompanyModal(false);
-      setSelectedCompany(null);
-      setCompanyForm({
-        name: '', registrationNumber: '', address: '', city: 'Vancouver',
-        province: 'BC', postalCode: '', phone: '', email: '',
-        registrationDate: '', profitLoss: 0, notes: '', requiresGST: false,
-      });
-    } catch (error: any) {
-      alert(error?.message || '保存公司失败，请查看 Docker 日志');
-    }
+    await updateCompany(selectedCompany.id, companyForm);
+    await loadCompanies();
+    setShowCompanyModal(false);
+    setSelectedCompany(null);
+    setCompanyForm({
+      name: '', registrationNumber: '', address: '', city: 'Vancouver',
+      province: 'BC', postalCode: '', phone: '', email: '',
+      registrationDate: '', profitLoss: 0, notes: '', requiresGST: false,
+    });
   };
 
   const handleDeleteCompany = async (id: number) => {
@@ -170,17 +205,13 @@ export default function Home() {
       alert('请选择公司并填写截止日期');
       return;
     }
-    try {
-      await createFiling(filingForm);
-      await loadFilings();
-      setShowFilingModal(false);
-      setFilingForm({
-        companyId: 0, type: 'income_tax', year: new Date().getFullYear(),
-        dueDate: '', amount: 0, notes: '',
-      });
-    } catch (error: any) {
-      alert(error?.message || '创建申报失败，请查看 Docker 日志');
-    }
+    await createFiling(filingForm);
+    await loadFilings();
+    setShowFilingModal(false);
+    setFilingForm({
+      companyId: 0, type: 'income_tax', year: new Date().getFullYear(),
+      dueDate: '', amount: 0, notes: '',
+    });
   };
 
   const handleCompleteFiling = async (filingId: number) => {
@@ -261,6 +292,49 @@ export default function Home() {
     }
   };
 
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-slate-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+          <div className="text-center mb-8">
+            <h1 className="text-3xl font-bold text-slate-800 mb-2">公司申报管理系统</h1>
+            <p className="text-slate-500">BC省公司报税与文档管理</p>
+          </div>
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">用户名</label>
+              <input
+                type="text"
+                required
+                value={loginForm.username}
+                onChange={(e) => setLoginForm({ ...loginForm, username: e.target.value })}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="请输入用户名"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-2">密码</label>
+              <input
+                type="password"
+                required
+                value={loginForm.password}
+                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                placeholder="请输入密码"
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 font-medium shadow-lg hover:shadow-xl transition-all"
+            >
+              登录
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
   const getDaysUntilDue = (dueDate: string) => {
     const due = new Date(dueDate);
     const now = new Date();
@@ -279,10 +353,10 @@ export default function Home() {
   };
 
   const getUrgencyColor = (days: number) => {
-    if (days < 0) return 'bg-red-50 text-red-700 ring-1 ring-red-200';
-    if (days <= 7) return 'bg-orange-50 text-orange-700 ring-1 ring-orange-200';
-    if (days <= 30) return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
-    return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200';
+    if (days < 0) return 'bg-red-100 text-red-800';
+    if (days <= 7) return 'bg-orange-100 text-orange-800';
+    if (days <= 30) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-green-100 text-green-800';
   };
 
   const pendingFilings = filings.filter(f => f.status === 'pending');
@@ -290,8 +364,8 @@ export default function Home() {
   const overdueFilings = pendingFilings.filter(f => getDaysUntilDue(f.dueDate) < 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20">
-      <nav className="bg-white/80 backdrop-blur-xl border-b border-slate-200/60 sticky top-0 z-40 shadow-sm">
+    <div className="min-h-screen bg-slate-50">
+      <nav className="bg-white shadow-sm border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
@@ -304,14 +378,26 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="rounded-lg bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200">直接访问模式</span>
+              <span className="text-sm text-slate-600">欢迎，<span className="font-semibold">{currentUser.name}</span></span>
+              <button
+                onClick={() => setShowPasswordModal(true)}
+                className="px-3 py-1.5 text-sm bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200"
+              >
+                修改密码
+              </button>
+              <button
+                onClick={handleLogout}
+                className="px-3 py-1.5 text-sm bg-red-100 text-red-600 rounded-lg hover:bg-red-200"
+              >
+                退出登录
+              </button>
             </div>
           </div>
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="flex space-x-2 mb-6 bg-white p-2 rounded-2xl shadow-sm border border-slate-200/60">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex space-x-2 mb-6 bg-white p-2 rounded-xl shadow-sm">
           {[
             { key: 'dashboard', label: '📊 数据总览', icon: '📊' },
             { key: 'companies', label: '🏢 公司管理', icon: '🏢' },
@@ -323,8 +409,8 @@ export default function Home() {
               onClick={() => setActiveTab(tab.key as any)}
               className={`flex-1 py-3 px-4 rounded-lg font-medium transition-all ${
                 activeTab === tab.key
-                  ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-md'
-                  : 'text-slate-600 hover:bg-slate-50'
+                  ? 'bg-blue-500 text-white shadow-lg'
+                  : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               {tab.label}
@@ -333,7 +419,7 @@ export default function Home() {
         </div>
 
         {activeTab === 'dashboard' && (
-          <div className="space-y-6 animate-fade-in">
+          <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {[
                 { label: '公司总数', value: companies.length, icon: '🏢', color: 'blue' },
@@ -346,7 +432,7 @@ export default function Home() {
               ].map((stat) => {
                 const borderColor = stat.color === 'blue' ? 'border-blue-500' : stat.color === 'yellow' ? 'border-yellow-500' : stat.color === 'red' ? 'border-red-500' : 'border-green-500';
                 return (
-                <div key={stat.label} className="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6 hover:shadow-md transition-shadow">
+                <div key={stat.label} className={`bg-white rounded-xl shadow-sm p-6 border-l-4 ${borderColor}`}>
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm text-slate-500 mb-1">{stat.label}</p>
@@ -359,17 +445,17 @@ export default function Home() {
               })}
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6">
+            <div className="bg-white rounded-xl shadow-sm p-6">
               <h2 className="text-lg font-bold text-slate-800 mb-4">⏰ 即将到期的申报</h2>
               <div className="space-y-3">
                 {upcomingFilings.length === 0 ? (
-                  <p className="text-center text-slate-500 py-6">暂无待申报记录</p>
+                  <p className="text-center text-slate-500 py-8">暂无待申报记录</p>
                 ) : (
                   upcomingFilings.map((filing) => {
                     const company = companies.find(c => c.id === filing.companyId);
                     const days = getDaysUntilDue(filing.dueDate);
                     return (
-                      <div key={filing.id} className="flex items-center justify-between bg-slate-50/80 rounded-xl p-4 hover:bg-slate-100/80 transition-colors border border-slate-100">
+                      <div key={filing.id} className="flex items-center justify-between bg-slate-50 rounded-lg p-4 hover:bg-slate-100 transition-colors">
                         <div className="flex items-center space-x-4">
                           <span className="text-2xl">
                             {filing.type === 'income_tax' ? '💰' : filing.type === 'gst' ? '🧾' : '📋'}
@@ -392,17 +478,17 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6">
+            <div className="bg-white rounded-xl shadow-sm p-6">
               <h2 className="text-lg font-bold text-slate-800 mb-4">🏢 公司信息一览</h2>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200">
-                      <th className="text-left py-3 px-2 font-semibold text-slate-500">公司名称</th>
-                      <th className="text-left py-3 px-2 font-semibold text-slate-500">注册日期</th>
-                      <th className="text-left py-3 px-2 font-semibold text-slate-500">最后申报</th>
-                      <th className="text-left py-3 px-2 font-semibold text-slate-500">下次申报</th>
-                      <th className="text-left py-3 px-2 font-semibold text-slate-500">GST申报</th>
+                      <th className="text-left py-3 px-2 font-semibold text-slate-600">公司名称</th>
+                      <th className="text-left py-3 px-2 font-semibold text-slate-600">注册日期</th>
+                      <th className="text-left py-3 px-2 font-semibold text-slate-600">最后申报</th>
+                      <th className="text-left py-3 px-2 font-semibold text-slate-600">下次申报</th>
+                      <th className="text-left py-3 px-2 font-semibold text-slate-600">GST申报</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -417,7 +503,7 @@ export default function Home() {
                       const lastFiledDate = lastFiled ? new Date(lastFiled.filedDate!).toLocaleDateString('zh-CN') : new Date(company.registrationDate).toLocaleDateString('zh-CN');
                       const nextDueDate = getNextDueDate(company);
                       return (
-                        <tr key={company.id} className="border-b border-slate-100 hover:bg-slate-50/50 transition-colors">
+                        <tr key={company.id} className="border-b border-slate-100 hover:bg-slate-50">
                           <td className="py-3 px-2 font-medium text-slate-800">{company.name}</td>
                           <td className="py-3 px-2 text-slate-600">{new Date(company.registrationDate).toLocaleDateString('zh-CN')}</td>
                           <td className="py-3 px-2 text-slate-600">{lastFiledDate}</td>
@@ -449,7 +535,7 @@ export default function Home() {
                   </tbody>
                 </table>
                 {companies.length === 0 && (
-                  <p className="text-center text-slate-500 py-6">暂无公司数据</p>
+                  <p className="text-center text-slate-500 py-8">暂无公司数据</p>
                 )}
               </div>
             </div>
@@ -457,7 +543,7 @@ export default function Home() {
         )}
 
         {activeTab === 'companies' && (
-          <div className="space-y-4 animate-fade-in">
+          <div className="space-y-4">
             <div className="flex justify-between items-center">
               <div className="flex items-center space-x-4">
                 <h2 className="text-xl font-bold text-slate-800">公司列表</h2>
@@ -466,8 +552,8 @@ export default function Home() {
                     onClick={() => setSortBy('registration')}
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                       sortBy === 'registration'
-                        ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white'
-                        : 'text-slate-600 hover:bg-slate-50'
+                        ? 'bg-blue-500 text-white'
+                        : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
                     按注册日期
@@ -476,8 +562,8 @@ export default function Home() {
                     onClick={() => setSortBy('filing')}
                     className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
                       sortBy === 'filing'
-                        ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white'
-                        : 'text-slate-600 hover:bg-slate-50'
+                        ? 'bg-blue-500 text-white'
+                        : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >
                     按申报日期
@@ -494,7 +580,7 @@ export default function Home() {
                   });
                   setShowCompanyModal(true);
                 }}
-                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:from-blue-600 hover:to-indigo-700 font-medium shadow-md hover:shadow-lg transition-all"
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium shadow-lg hover:shadow-xl transition-all"
               >
                 + 添加公司
               </button>
@@ -512,7 +598,7 @@ export default function Home() {
                 return (
                   <div
                     key={company.id}
-                    className="bg-white rounded-2xl shadow-sm border border-slate-200/60 hover:shadow-lg transition-all p-6 cursor-pointer border border-slate-200/60 hover:border-blue-200 group"
+                    className="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all p-6 cursor-pointer border border-slate-200"
                     onClick={() => handleViewCompanyDetail(company)}
                   >
                     <div className="flex items-start justify-between mb-3">
@@ -572,7 +658,7 @@ export default function Home() {
         )}
 
         {activeTab === 'filings' && (
-          <div className="space-y-4 animate-fade-in">
+          <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-xl font-bold text-slate-800">申报记录</h2>
               <button
@@ -594,19 +680,19 @@ export default function Home() {
                   });
                   setShowFilingModal(true);
                 }}
-                className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-xl hover:from-blue-600 hover:to-indigo-700 font-medium shadow-md hover:shadow-lg transition-all"
+                className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium shadow-lg hover:shadow-xl transition-all"
               >
                 + 添加申报
               </button>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 overflow-hidden">
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gradient-to-r from-slate-50 to-slate-100/50 border-b border-slate-200">
+                  <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
                       {['公司名称', '申报类型', '年度', '本次申报日期', '截止日期', '状态', '金额', '操作'].map((header) => (
-                        <th key={header} className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        <th key={header} className="px-6 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">
                           {header}
                         </th>
                       ))}
@@ -642,9 +728,9 @@ export default function Home() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                              filing.status === 'filed' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' :
+                              filing.status === 'filed' ? 'bg-green-100 text-green-800' :
                               filing.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
-                              'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                              'bg-yellow-100 text-yellow-800'
                             }`}>
                               {statusNames[filing.status]}
                             </span>
@@ -712,7 +798,7 @@ export default function Home() {
         )}
 
         {activeTab === 'logs' && (
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200/60 p-6">
+          <div className="bg-white rounded-xl shadow-sm p-6">
             <h2 className="text-xl font-bold text-slate-800 mb-4">操作日志</h2>
             <div className="space-y-2">
               {logs.map((log) => (
@@ -736,9 +822,9 @@ export default function Home() {
       </div>
 
       {showCompanyDetail && selectedCompany && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto animate-fade-in">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-8">
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-6 rounded-t-2xl">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-6 rounded-t-2xl">
               <div className="flex justify-between items-start">
                 <div>
                   <h2 className="text-2xl font-bold mb-2">{selectedCompany.name}</h2>
@@ -753,7 +839,7 @@ export default function Home() {
               </div>
             </div>
 
-            <div className="p-6 space-y-8">
+            <div className="p-8 space-y-8">
               <div>
                 <h3 className="text-lg font-semibold text-slate-700 mb-4">基本信息</h3>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -768,13 +854,13 @@ export default function Home() {
                     { label: '邮箱', value: selectedCompany.email || '-' },
                     { label: '盈亏状况', value: `${(selectedCompany.profitLoss || 0) >= 0 ? '+' : ''}$${(selectedCompany.profitLoss || 0).toLocaleString()}` },
                   ].map((item) => (
-                    <div key={item.label} className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                    <div key={item.label} className="bg-slate-50 rounded-lg p-3">
                       <p className="text-xs text-slate-500 mb-1">{item.label}</p>
                       <p className="text-sm font-medium text-slate-800">{item.value}</p>
                     </div>
                   ))}
                   
-                  <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                  <div className="bg-slate-50 rounded-lg p-3">
                     <p className="text-xs text-slate-500 mb-1">GST申报</p>
                     <p className="text-sm font-medium">
                       {selectedCompany.requiresGST ? (
@@ -786,7 +872,7 @@ export default function Home() {
                   </div>
                 </div>
                 {selectedCompany.notes && (
-                  <div className="mt-4 bg-amber-50 rounded-xl p-4 border border-amber-200/50">
+                  <div className="mt-4 bg-yellow-50 rounded-lg p-4">
                     <p className="text-xs text-slate-500 mb-1">备注</p>
                     <p className="text-sm text-slate-700">{selectedCompany.notes}</p>
                   </div>
@@ -795,7 +881,7 @@ export default function Home() {
 
               <div>
                 <h3 className="text-lg font-semibold text-slate-700 mb-4">📜 历史申报记录</h3>
-                <div className="bg-white rounded-xl p-4 hover:bg-slate-50 transition-colors border border-slate-100 mb-2 max-h-60 overflow-y-auto">
+                <div className="bg-slate-50 rounded-lg p-4 max-h-60 overflow-y-auto">
                   {selectedCompany.history && selectedCompany.history.length > 0 ? (
                     <div className="space-y-2">
                       {selectedCompany.history.map((record: any) => (
@@ -815,7 +901,7 @@ export default function Home() {
                               </p>
                             </div>
                           </div>
-                          <span className="px-2 py-1 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 rounded-full text-xs font-medium">
+                          <span className="px-2 py-1 bg-green-100 text-green-800 rounded-full text-xs font-medium">
                             已完成
                           </span>
                         </div>
@@ -834,7 +920,7 @@ export default function Home() {
                     selectedCompany.filings.map((filing: Filing) => {
                       const days = filing.status === 'pending' ? getDaysUntilDue(filing.dueDate) : null;
                       return (
-                        <div key={filing.id} className="bg-slate-50/80 rounded-xl p-4 hover:bg-slate-100/80 transition-colors border border-slate-100">
+                        <div key={filing.id} className="bg-slate-50 rounded-lg p-4 hover:bg-slate-100 transition-colors">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-3">
                               <span className="text-2xl">
@@ -860,9 +946,9 @@ export default function Home() {
                                 </span>
                               )}
                               <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                                filing.status === 'filed' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200' :
+                                filing.status === 'filed' ? 'bg-green-100 text-green-800' :
                                 filing.status === 'cancelled' ? 'bg-gray-100 text-gray-800' :
-                                'bg-amber-50 text-amber-700 ring-1 ring-amber-200'
+                                'bg-yellow-100 text-yellow-800'
                               }`}>
                                 {statusNames[filing.status]}
                               </span>
@@ -894,7 +980,7 @@ export default function Home() {
                       );
                     })
                   ) : (
-                    <p className="text-center text-slate-500 py-6">暂无申报记录</p>
+                    <p className="text-center text-slate-500 py-8">暂无申报记录</p>
                   )}
                 </div>
               </div>
@@ -904,7 +990,7 @@ export default function Home() {
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                   {selectedCompany.documents && selectedCompany.documents.length > 0 ? (
                     selectedCompany.documents.map((doc: Document) => (
-                      <div key={doc.id} className="bg-slate-50 rounded-xl p-4 hover:bg-slate-100 transition-colors group relative border border-slate-100">
+                      <div key={doc.id} className="bg-slate-50 rounded-lg p-4 hover:bg-slate-100 transition-colors group relative">
                         {doc.mimeType?.startsWith('image/') ? (
                           <img
                             src={doc.fileUrl}
@@ -930,7 +1016,7 @@ export default function Home() {
                       </div>
                     ))
                   ) : (
-                    <div className="col-span-3 text-center text-slate-500 py-6">暂无文档</div>
+                    <div className="col-span-3 text-center text-slate-500 py-8">暂无文档</div>
                   )}
                 </div>
               </div>
@@ -946,9 +1032,9 @@ export default function Home() {
       )}
 
       {showCompanyModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto animate-fade-in">
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-8">
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-6 rounded-t-2xl">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-6 rounded-t-2xl">
               <h2 className="text-2xl font-bold">
                 {selectedCompany ? '编辑公司' : '创建公司'}
               </h2>
@@ -965,7 +1051,7 @@ export default function Home() {
                     required
                     value={companyForm.name}
                     onChange={(e) => setCompanyForm({ ...companyForm, name: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="请输入公司名称"
                   />
                 </div>
@@ -976,7 +1062,7 @@ export default function Home() {
                     type="text"
                     value={companyForm.registrationNumber}
                     onChange={(e) => setCompanyForm({ ...companyForm, registrationNumber: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="BC1234567"
                   />
                 </div>
@@ -990,7 +1076,7 @@ export default function Home() {
                     required
                     value={companyForm.registrationDate}
                     onChange={(e) => setCompanyForm({ ...companyForm, registrationDate: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
 
@@ -1003,7 +1089,7 @@ export default function Home() {
                     required
                     value={companyForm.address}
                     onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="123 Main Street"
                   />
                 </div>
@@ -1014,7 +1100,7 @@ export default function Home() {
                     type="text"
                     value={companyForm.city}
                     onChange={(e) => setCompanyForm({ ...companyForm, city: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Vancouver"
                   />
                 </div>
@@ -1024,7 +1110,7 @@ export default function Home() {
                   <select
                     value={companyForm.province}
                     onChange={(e) => setCompanyForm({ ...companyForm, province: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     {['BC', 'AB', 'SK', 'MB', 'ON', 'QC', 'NB', 'NS', 'PE', 'NL', 'YT', 'NT', 'NU'].map(p => (
                       <option key={p} value={p}>{p}</option>
@@ -1038,7 +1124,7 @@ export default function Home() {
                     type="text"
                     value={companyForm.postalCode}
                     onChange={(e) => setCompanyForm({ ...companyForm, postalCode: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="V6B 1A1"
                   />
                 </div>
@@ -1049,7 +1135,7 @@ export default function Home() {
                     type="tel"
                     value={companyForm.phone}
                     onChange={(e) => setCompanyForm({ ...companyForm, phone: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="604-555-0001"
                   />
                 </div>
@@ -1060,7 +1146,7 @@ export default function Home() {
                     type="email"
                     value={companyForm.email}
                     onChange={(e) => setCompanyForm({ ...companyForm, email: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="info@company.com"
                   />
                 </div>
@@ -1071,7 +1157,7 @@ export default function Home() {
                     type="number"
                     value={companyForm.profitLoss}
                     onChange={(e) => setCompanyForm({ ...companyForm, profitLoss: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="50000"
                   />
                 </div>
@@ -1097,7 +1183,7 @@ export default function Home() {
                     value={companyForm.notes}
                     onChange={(e) => setCompanyForm({ ...companyForm, notes: e.target.value })}
                     rows={3}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="其他备注信息"
                   />
                 </div>
@@ -1114,13 +1200,13 @@ export default function Home() {
                       registrationDate: '', profitLoss: 0, notes: '', requiresGST: false,
                     });
                   }}
-                  className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 font-medium transition-colors"
+                  className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 font-medium"
                 >
                   取消
                 </button>
                 <button
                   onClick={selectedCompany ? handleUpdateCompany : handleCreateCompany}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:bg-blue-600 font-medium"
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium"
                 >
                   {selectedCompany ? '保存修改' : '创建公司'}
                 </button>
@@ -1133,7 +1219,7 @@ export default function Home() {
       {showFilingModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-6 rounded-t-2xl">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-6 rounded-t-2xl">
               <h2 className="text-2xl font-bold">创建申报记录</h2>
             </div>
             
@@ -1146,7 +1232,7 @@ export default function Home() {
                   <select
                     value={filingForm.companyId}
                     onChange={(e) => setFilingForm({ ...filingForm, companyId: parseInt(e.target.value) })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value={0}>请选择公司</option>
                     {companies.map(c => (
@@ -1162,7 +1248,7 @@ export default function Home() {
                   <select
                     value={filingForm.type}
                     onChange={(e) => setFilingForm({ ...filingForm, type: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="income_tax">年度报税</option>
                     <option value="gst">GST申报</option>
@@ -1178,7 +1264,7 @@ export default function Home() {
                     type="number"
                     value={filingForm.year}
                     onChange={(e) => setFilingForm({ ...filingForm, year: parseInt(e.target.value) })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     min={2000}
                     max={2100}
                   />
@@ -1192,7 +1278,7 @@ export default function Home() {
                     type="date"
                     value={filingForm.dueDate}
                     onChange={(e) => setFilingForm({ ...filingForm, dueDate: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                   <p className="text-xs text-slate-500 mt-1">首次创建时系统会根据注册日期自动建议申报日期，您可以手动修改</p>
                 </div>
@@ -1203,7 +1289,7 @@ export default function Home() {
                     type="number"
                     value={filingForm.amount}
                     onChange={(e) => setFilingForm({ ...filingForm, amount: parseFloat(e.target.value) || 0 })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="0"
                   />
                 </div>
@@ -1214,7 +1300,7 @@ export default function Home() {
                     value={filingForm.notes}
                     onChange={(e) => setFilingForm({ ...filingForm, notes: e.target.value })}
                     rows={3}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="其他备注信息"
                   />
                 </div>
@@ -1229,13 +1315,13 @@ export default function Home() {
                       dueDate: '', amount: 0, notes: '',
                     });
                   }}
-                  className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 font-medium transition-colors"
+                  className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 font-medium"
                 >
                   取消
                 </button>
                 <button
                   onClick={handleCreateFiling}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:bg-blue-600 font-medium"
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium"
                 >
                   创建申报
                 </button>
@@ -1248,7 +1334,7 @@ export default function Home() {
       {showDocumentModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="bg-gradient-to-r from-blue-500 to-indigo-600 text-white p-6 rounded-t-2xl">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-6 rounded-t-2xl">
               <h2 className="text-2xl font-bold">上传文档</h2>
             </div>
             
@@ -1260,7 +1346,7 @@ export default function Home() {
                     type="text"
                     value={documentForm.name}
                     onChange={(e) => setDocumentForm({ ...documentForm, name: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="留空则使用文件名"
                   />
                 </div>
@@ -1270,7 +1356,7 @@ export default function Home() {
                   <select
                     value={documentForm.type}
                     onChange={(e) => setDocumentForm({ ...documentForm, type: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="receipt">收据</option>
                     <option value="invoice">发票</option>
@@ -1298,7 +1384,7 @@ export default function Home() {
                          setDocumentForm({ ...documentForm, file });
                        }
                      }}
-                     className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500 transition-all bg-slate-50/50 hover:bg-white"
+                     className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                    />
                    <p className="text-xs text-slate-500 mt-2">
                      支持: 图片、PDF、Word文档（最大 5MB）
@@ -1313,19 +1399,91 @@ export default function Home() {
                     setSelectedFiling(null);
                     setDocumentForm({ name: '', type: 'receipt', file: null });
                   }}
-                  className="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 font-medium transition-colors"
+                  className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 font-medium"
                 >
                   取消
                 </button>
                 <button
                   onClick={handleFileUpload}
                   disabled={!documentForm.file}
-                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-600 text-white rounded-lg hover:bg-blue-600 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   上传
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="bg-gradient-to-r from-blue-500 to-blue-600 text-white p-6 rounded-t-2xl">
+              <h2 className="text-2xl font-bold">修改密码</h2>
+            </div>
+            
+            <form onSubmit={handleChangePassword} className="p-8">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    原密码 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={passwordForm.oldPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, oldPassword: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    新密码 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={passwordForm.newPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
+                    确认新密码 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    value={passwordForm.confirmPassword}
+                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                    className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowPasswordModal(false);
+                    setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                  }}
+                  className="px-4 py-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 font-medium"
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium"
+                >
+                  确认修改
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -1352,7 +1510,3 @@ export default function Home() {
     </div>
   );
 }
-
-
-
-
