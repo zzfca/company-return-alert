@@ -8,9 +8,8 @@ services:
     container_name: bc-company-manager
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3588:3000"
     volumes:
-      # Mount database file for persistence
       - ./data/db.sqlite:/app/db.sqlite
     environment:
       - NODE_ENV=production
