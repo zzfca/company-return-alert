@@ -7,7 +7,7 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       app: 'company-return-alert',
-      version: 'api-auth-health-v1',
+      version: 'api-health-v2',
       databaseUrl: process.env.DATABASE_URL || 'file:db.sqlite',
       timestamp: new Date().toISOString(),
     });
@@ -16,7 +16,7 @@ export async function GET() {
       {
         ok: false,
         app: 'company-return-alert',
-        version: 'api-auth-health-v1',
+        version: 'api-health-v2',
         databaseUrl: process.env.DATABASE_URL || 'file:db.sqlite',
         error: error?.message || String(error),
       },

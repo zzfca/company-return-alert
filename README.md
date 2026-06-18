@@ -46,6 +46,8 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_URL: file:/app/data/db.sqlite
+      # Optional: add your reverse proxy domain if Server Actions are blocked
+      # SERVER_ACTION_ALLOWED_ORIGINS: company.yourdomain.com,*.yourdomain.com
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
       interval: 30s
@@ -175,6 +177,8 @@ ports:
 For example, use `8080:3000` if you want to visit `http://your-server-ip:8080`.
 
 ### Reverse Proxy (Nginx) 反向代理
+
+If you access the app through a custom reverse proxy domain and create/update actions fail, add that host to `SERVER_ACTION_ALLOWED_ORIGINS` in `docker-compose.yml`, then pull and restart the container.
 
 If Docker is exposed on host port `3588`, Nginx can proxy to it like this:
 

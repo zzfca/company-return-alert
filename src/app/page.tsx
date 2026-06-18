@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import {
   getCompanies,
-  createCompany,
   updateCompany,
   deleteCompany,
   getCompanyWithDetails,
@@ -91,27 +90,43 @@ export default function Home() {
       alert('请填写必填项');
       return;
     }
-    await createCompany(companyForm);
-    await loadCompanies();
-    setShowCompanyModal(false);
-    setCompanyForm({
-      name: '', registrationNumber: '', address: '', city: 'Vancouver',
-      province: 'BC', postalCode: '', phone: '', email: '',
-      registrationDate: '', profitLoss: 0, notes: '', requiresGST: false,
-    });
+    try {
+      const response = await fetch('/api/companies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(companyForm),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || '创建公司失败');
+      }
+      await loadCompanies();
+      setShowCompanyModal(false);
+      setCompanyForm({
+        name: '', registrationNumber: '', address: '', city: 'Vancouver',
+        province: 'BC', postalCode: '', phone: '', email: '',
+        registrationDate: '', profitLoss: 0, notes: '', requiresGST: false,
+      });
+    } catch (error: any) {
+      alert(error?.message || '创建公司失败，请查看 Docker 日志');
+    }
   };
 
   const handleUpdateCompany = async () => {
     if (!selectedCompany) return;
-    await updateCompany(selectedCompany.id, companyForm);
-    await loadCompanies();
-    setShowCompanyModal(false);
-    setSelectedCompany(null);
-    setCompanyForm({
-      name: '', registrationNumber: '', address: '', city: 'Vancouver',
-      province: 'BC', postalCode: '', phone: '', email: '',
-      registrationDate: '', profitLoss: 0, notes: '', requiresGST: false,
-    });
+    try {
+      await updateCompany(selectedCompany.id, companyForm);
+      await loadCompanies();
+      setShowCompanyModal(false);
+      setSelectedCompany(null);
+      setCompanyForm({
+        name: '', registrationNumber: '', address: '', city: 'Vancouver',
+        province: 'BC', postalCode: '', phone: '', email: '',
+        registrationDate: '', profitLoss: 0, notes: '', requiresGST: false,
+      });
+    } catch (error: any) {
+      alert(error?.message || '保存公司失败，请查看 Docker 日志');
+    }
   };
 
   const handleDeleteCompany = async (id: number) => {
@@ -155,13 +170,17 @@ export default function Home() {
       alert('请选择公司并填写截止日期');
       return;
     }
-    await createFiling(filingForm);
-    await loadFilings();
-    setShowFilingModal(false);
-    setFilingForm({
-      companyId: 0, type: 'income_tax', year: new Date().getFullYear(),
-      dueDate: '', amount: 0, notes: '',
-    });
+    try {
+      await createFiling(filingForm);
+      await loadFilings();
+      setShowFilingModal(false);
+      setFilingForm({
+        companyId: 0, type: 'income_tax', year: new Date().getFullYear(),
+        dueDate: '', amount: 0, notes: '',
+      });
+    } catch (error: any) {
+      alert(error?.message || '创建申报失败，请查看 Docker 日志');
+    }
   };
 
   const handleCompleteFiling = async (filingId: number) => {
