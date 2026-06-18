@@ -2,8 +2,14 @@ import { drizzle } from 'drizzle-orm/libsql';
 import { createClient } from '@libsql/client';
 import * as schema from './schema';
 import { users, companies } from './schema';
-import { hashPassword } from '@/lib/auth';
 import { sql } from 'drizzle-orm';
+import bcrypt from 'bcryptjs';
+
+const SALT_ROUNDS = 10;
+
+async function hashPassword(password: string): Promise<string> {
+  return bcrypt.hash(password, SALT_ROUNDS);
+}
 
 const databaseUrl = process.env.DATABASE_URL || 'file:db.sqlite';
 const client = createClient({ url: databaseUrl });

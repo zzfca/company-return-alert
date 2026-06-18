@@ -12,7 +12,6 @@ A lightweight company declaration management system for BC Province companies, b
 - **Tax Filing Tracking** - 税务申报跟踪（年度报税/GST/年报）
 - **Document Storage** - 文档资料管理
 - **Audit Logs** - 操作审计日志
-- **Role-based Auth** - 基于 Cookie 的安全认证
 - **Docker Ready** - 一段 Docker Compose 配置即可部署
 
 ## Tech Stack 技术栈
@@ -23,7 +22,6 @@ A lightweight company declaration management system for BC Province companies, b
 | Database | SQLite (via libSQL) |
 | ORM | Drizzle ORM |
 | Styling | Tailwind CSS |
-| Authentication | bcrypt + httpOnly Cookie |
 | Deployment | Docker + Docker Compose |
 
 ---
@@ -72,6 +70,8 @@ docker compose up -d --build
 ```text
 http://your-server-ip:3588
 ```
+
+打开地址后即可直接进入系统，无需登录。
 
 停止：
 
@@ -132,17 +132,6 @@ Open in browser:
 ```text
 http://your-server-ip:3588
 ```
-
----
-
-## Default Accounts 默认账号
-
-| Username | Password | Role |
-|----------|----------|------|
-| xie | xie123 | admin |
-| admin | admin123 | admin |
-
-> Important: Change default passwords after first login.
 
 ---
 
@@ -213,8 +202,6 @@ company-return-alert/
 │   │   ├── index.ts      # Database connection
 │   │   ├── schema.ts     # Drizzle schema
 │   │   └── seed.ts       # Seed data
-│   └── lib/
-│       └── auth.ts       # Authentication
 ├── Dockerfile            # Multi-stage Docker build
 ├── docker-compose.yml    # Docker Compose config
 ├── .dockerignore         # Docker ignore rules

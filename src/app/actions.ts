@@ -4,7 +4,6 @@ import { db } from '@/db';
 import { companies, filings, documents, users, auditLogs, filingHistory } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { seedDatabase } from '@/db/seed';
-import { getCurrentUser, login, logout, changePassword as authChangePassword } from '@/lib/auth';
 import type { NewCompany, NewFiling, NewFilingHistory } from '@/db/schema';
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -23,26 +22,19 @@ function calculateDueDate(registrationDate: string, year: number): string {
 }
 
 async function requireAuth() {
-  const user = await getCurrentUser();
-  if (!user) throw new Error('未授权，请先登录');
-  return user;
-}
-
-// ─── auth ────────────────────────────────────────────────────────────────────
-
-export async function authenticateUser(username: string, password: string) {
-  // 自动初始化数据库（首次使用时自动创建默认用户和示例数据）
   await seedDatabase();
-  return login(username, password);
+  const [user] = await db.select().from(users).where(eq(users.username, 'xie')).limit(1);
+  if (user) return { id: user.id, username: user.username, name: user.name, role: user.role };
+
+  const [fallbackUser] = await db.select().from(users).limit(1);
+  if (!fallbackUser) throw new Error('系统用户初始化失败');
+  return {
+    id: fallbackUser.id,
+    username: fallbackUser.username,
+    name: fallbackUser.name,
+    role: fallbackUser.role,
+  };
 }
-
-export { logout };
-
-export async function changePassword(oldPassword: string, newPassword: string) {
-  return authChangePassword(oldPassword, newPassword);
-}
-
-export { getCurrentUser };
 
 // ─── companies ───────────────────────────────────────────────────────────────
 
