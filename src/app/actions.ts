@@ -4,6 +4,13 @@ import { db } from '@/db';
 import { companies, filings, documents, users, auditLogs, filingHistory } from '@/db/schema';
 import { eq, and, desc } from 'drizzle-orm';
 import { seedDatabase } from '@/db/seed';
+import {
+  changePassword as authChangePassword,
+  getCurrentUser as authGetCurrentUser,
+  login,
+  logout as authLogout,
+  requireCurrentUser,
+} from '@/lib/auth';
 import type { NewCompany, NewFiling } from '@/db/schema';
 
 function calculateDueDate(registrationDate: string, year: number): string {
@@ -20,10 +27,23 @@ function calculateDueDate(registrationDate: string, year: number): string {
 }
 
 async function requireAuth() {
-  await seedDatabase();
-  const [user] = await db.select().from(users).where(eq(users.username, 'xie')).limit(1);
-  if (!user) throw new Error('系统用户初始化失败');
-  return user;
+  return requireCurrentUser();
+}
+
+export async function authenticateUser(username: string, password: string) {
+  return login(username, password);
+}
+
+export async function logout() {
+  return authLogout();
+}
+
+export async function changePassword(oldPassword: string, newPassword: string) {
+  return authChangePassword(oldPassword, newPassword);
+}
+
+export async function getCurrentUser() {
+  return authGetCurrentUser();
 }
 
 export async function createCompany(data: Omit<NewCompany, 'createdBy' | 'lastModifiedBy'>) {

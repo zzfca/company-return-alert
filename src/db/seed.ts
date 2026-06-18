@@ -108,20 +108,19 @@ async function ensureTables() {
 export async function seedDatabase() {
   await ensureTables();
 
-  const existingUsers = await db.select().from(users);
-  if (existingUsers.length > 0) {
+  const [adminUser] = await db.select().from(users).where(sql`${users.username} = 'admin'`).limit(1);
+  if (adminUser) {
+    const usesOldDefaultPassword = await bcrypt.compare('admin123', adminUser.password);
+    if (usesOldDefaultPassword) {
+      await db.update(users)
+        .set({ password: await hashPassword('admin'), name: 'Admin', role: 'admin' })
+        .where(sql`${users.id} = ${adminUser.id}`);
+    }
     return { initialized: true, message: '数据库已初始化' };
   }
 
-  const [xieHash, adminHash] = await Promise.all([
-    hashPassword('xie123'),
-    hashPassword('admin123'),
-  ]);
-
-  await db.insert(users).values([
-    { username: 'xie', password: xieHash, name: 'Xie', role: 'admin' },
-    { username: 'admin', password: adminHash, name: 'Admin', role: 'admin' },
-  ]);
+  const adminHash = await hashPassword('admin');
+  await db.insert(users).values({ username: 'admin', password: adminHash, name: 'Admin', role: 'admin' });
 
   await db.insert(companies).values([
     {
