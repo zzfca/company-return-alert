@@ -15,13 +15,10 @@ import {
   deleteFiling,
   uploadDocument,
   deleteDocument,
-  authenticateUser,
   changePassword,
   getAuditLogs,
-  getCurrentUser,
-  logout as serverLogout,
 } from '@/app/actions';
-import type { Company, Filing, Document, AuditLog } from '@/db/schema';
+import type { Company, Filing, Document } from '@/db/schema';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -78,9 +75,12 @@ export default function Home() {
 
   useEffect(() => {
     // 从服务端获取当前登录状态
-    getCurrentUser().then(user => {
-      if (user) setCurrentUser(user);
-    });
+    fetch('/api/auth/me')
+      .then((response) => response.json())
+      .then(({ user }) => {
+        if (user) setCurrentUser(user);
+      })
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -112,8 +112,14 @@ export default function Home() {
     setIsLoggingIn(true);
 
     try {
-      const result = await authenticateUser(loginForm.username, loginForm.password);
-      if (result.success && result.user) {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginForm),
+      });
+      const result = await response.json();
+
+      if (response.ok && result.success && result.user) {
         setCurrentUser(result.user);
         setLoginForm({ username: '', password: '' });
       } else {
@@ -127,7 +133,7 @@ export default function Home() {
   };
 
   const handleLogout = async () => {
-    await serverLogout();
+    await fetch('/api/auth/logout', { method: 'POST' });
     setCurrentUser(null);
   };
 
@@ -1527,4 +1533,6 @@ export default function Home() {
     </div>
   );
 }
+
+
 
