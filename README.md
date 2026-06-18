@@ -1,6 +1,6 @@
 # BC Company Declaration Management System
 
-BC省公司申报管理系统 — Next.js 15 + SQLite + Docker
+BC省公司申报管理系统 - Next.js 15 + SQLite + Docker
 
 A lightweight company declaration management system for BC Province companies, built with Next.js 15, SQLite, and Docker.
 
@@ -8,12 +8,12 @@ A lightweight company declaration management system for BC Province companies, b
 
 ## Features 功能特性
 
-- **Multi-company Management** — 多公司信息管理
-- **Tax Filing Tracking** — 税务申报跟踪（年度报税/GST/年报）
-- **Document Storage** — 文档资料管理
-- **Audit Logs** — 操作审计日志
-- **Role-based Auth** — 基于 Cookie 的安全认证
-- **Docker Ready** — 一键 Docker 部署
+- **Multi-company Management** - 多公司信息管理
+- **Tax Filing Tracking** - 税务申报跟踪（年度报税/GST/年报）
+- **Document Storage** - 文档资料管理
+- **Audit Logs** - 操作审计日志
+- **Role-based Auth** - 基于 Cookie 的安全认证
+- **Docker Ready** - 一键 Docker 部署
 
 ## Tech Stack 技术栈
 
@@ -39,22 +39,55 @@ A lightweight company declaration management system for BC Province companies, b
 
 ```bash
 # Clone and install
-git clone <your-repo-url>
-cd 2nd-company
+git clone https://github.com/zzfca/company-return-alert.git
+cd company-return-alert
 npm install
 
 # Run development server
-npm run dev
+npm run dev -- -p 3588
 
-# Open http://localhost:3000
+# Open http://localhost:3588
 ```
 
 ### Docker Deployment Docker 部署
 
+`docker-compose.yml` 完整内容如下，宿主机访问端口已经设置为 `3588`：
+
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bc-company-manager
+    restart: unless-stopped
+    ports:
+      - "3588:3000"
+    volumes:
+      - ./data/db.sqlite:/app/db.sqlite
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
+```
+
 ```bash
 # Clone the repo
-git clone <your-repo-url>
-cd 2nd-company
+git clone https://github.com/zzfca/company-return-alert.git
+cd company-return-alert
 
 # Build and start
 docker compose up -d --build
@@ -66,7 +99,7 @@ docker compose logs -f
 docker compose down
 ```
 
-Access at **http://localhost:3000**
+Access at **http://your-server-ip:3588** or **http://localhost:3588**
 
 ---
 
@@ -98,9 +131,8 @@ sudo docker compose version
 mkdir -p ~/bc-company-manager
 cd ~/bc-company-manager
 
-# Upload project files (via scp, git clone, or manual transfer)
 # Option A: Clone from GitHub
-git clone <your-repo-url> .
+git clone https://github.com/zzfca/company-return-alert.git .
 
 # Option B: Upload via scp
 scp -r * username@your-server:~/bc-company-manager/
@@ -119,7 +151,13 @@ docker ps
 docker compose logs -f
 
 # Test HTTP endpoint
-curl http://localhost:3000
+curl http://localhost:3588
+```
+
+Open in browser:
+
+```text
+http://your-server-ip:3588
 ```
 
 ---
@@ -131,7 +169,7 @@ curl http://localhost:3000
 | xie | xie123 | admin |
 | admin | admin123 | admin |
 
-> ⚠️ **Important**: Change default passwords after first login!
+> Important: Change default passwords after first login.
 
 ---
 
@@ -156,12 +194,17 @@ docker compose up -d
 ### Change Port 修改端口
 
 Edit `docker-compose.yml`:
+
 ```yaml
 ports:
-  - "8080:3000"  # Host:Container
+  - "3588:3000"  # Host:Container
 ```
 
+The left side is the Ubuntu host port, and the right side is the container port.
+
 ### Reverse Proxy (Nginx) 反向代理
+
+If Docker is exposed on host port `3588`, Nginx can proxy to it like this:
 
 ```nginx
 server {
@@ -169,7 +212,7 @@ server {
     server_name company.yourdomain.com;
 
     location / {
-        proxy_pass http://localhost:3000;
+        proxy_pass http://localhost:3588;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -183,8 +226,8 @@ server {
 
 ## Project Structure 项目结构
 
-```
-2nd-company/
+```text
+company-return-alert/
 ├── src/
 │   ├── app/              # Next.js app router
 │   │   ├── api/init/     # Database initialization API
@@ -235,19 +278,22 @@ docker exec -it bc-company-manager sh  # Enter container
 ## Troubleshooting 故障排查
 
 ### Container won't start
+
 ```bash
 docker compose logs app
 ```
 
 ### Port already in use
+
 ```bash
-# Find process using port 3000
-sudo lsof -i :3000
+# Find process using port 3588
+sudo lsof -i :3588
 # Kill it
 sudo kill -9 <PID>
 ```
 
 ### Permission denied on database
+
 ```bash
 # Fix permissions
 sudo chmod 666 data/db.sqlite
@@ -257,4 +303,5 @@ sudo chmod 666 data/db.sqlite
 
 ## License 许可证
 
-Private — All rights reserved
+Private - All rights reserved
+
