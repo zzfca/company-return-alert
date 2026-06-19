@@ -1,21 +1,22 @@
-# 依赖
+# Dependencies
 node_modules
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Next.js 构建输出
+# Next.js build output
 .next
 out
+*.tsbuildinfo
 
-# 环境变量文件
+# Environment files
 .env
 .env*.local
 
-# 日志
+# Logs
 *.log
 
-# 系统文件
+# System files
 .DS_Store
 Thumbs.db
 
@@ -26,22 +27,27 @@ Thumbs.db
 *.swo
 *~
 
-# 测试
+# Tests
 coverage
 .nyc_output
 
-# Git
+# Git and CI
 .git
 .gitignore
+.github
 
-# 数据库文件（会通过 volume 挂载）
+# Local database files; production uses the mounted volume
 *.sqlite
 *.sqlite-journal
 *.db
-
-# 其他
-README.md
-.editorconfig
 data/
+
+# Docs and local utilities
+README.md
+*.md
+.editorconfig
 drizzle/
 check-db.mjs
+docker-compose*.yml
+docker-compose*.yaml
+Dockerfile
